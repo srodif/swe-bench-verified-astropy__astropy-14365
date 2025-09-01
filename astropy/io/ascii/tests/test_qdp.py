@@ -245,3 +245,49 @@ def test_get_lines_from_qdp(tmp_path):
         assert file_output[i] == line
         assert list_output[i] == line
         assert text_output[i] == line
+
+
+def test_lowercase_command_support():
+    """Test that QDP format supports both uppercase and lowercase commands."""
+    from astropy.io.ascii.qdp import _line_type
+    
+    # Test lowercase commands
+    assert _line_type("read serr 1 2") == "command"
+    assert _line_type("read terr 1") == "command"
+    
+    # Test mixed case commands
+    assert _line_type("Read Serr 1 2") == "command"  
+    assert _line_type("READ terr 1") == "command"
+    
+    # Test original uppercase commands still work
+    assert _line_type("READ SERR 1 2") == "command"
+    assert _line_type("READ TERR 1") == "command"
+
+
+def test_read_qdp_lowercase_commands(tmp_path):
+    """Test reading QDP file with lowercase commands."""
+    # This reproduces the exact example from the issue
+    example_qdp = """read serr 1 2 
+1 0.5 1 0.5"""
+    
+    path = tmp_path / "test_lowercase.qdp"
+    with open(path, "w") as fp:
+        print(example_qdp, file=fp)
+    
+    # This should not raise an exception
+    table = _read_table_qdp(str(path), table_id=0)
+    
+    # Verify table structure - "read serr 1 2" means both col1 and col2 get error columns
+    assert len(table) == 1  # One data row
+    assert len(table.columns) == 4  # col1, col1_err, col2, col2_err
+    assert "col1" in table.colnames
+    assert "col1_err" in table.colnames
+    assert "col2" in table.colnames  
+    assert "col2_err" in table.colnames
+    
+    # Verify data values: "1 0.5 1 0.5" with "read serr 1 2"
+    # Means: col1=1, col1_err=0.5, col2=1, col2_err=0.5
+    assert table["col1"][0] == 1
+    assert table["col1_err"][0] == 0.5
+    assert table["col2"][0] == 1
+    assert table["col2_err"][0] == 0.5
